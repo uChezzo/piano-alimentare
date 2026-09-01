@@ -35,21 +35,55 @@ const L = {
   set(k, v) { try { localStorage.setItem("pv." + k, JSON.stringify(v)); } catch {} }
 };
 
-/* ------------- dialogo col foglio ------------- */
-async function chiama(azione, extra = {}, silenzioso = false) {
-  if (!S.cfg.url) return { ok: false, errore: "Indirizzo del backend non impostato" };
-  try {
-    const r = await fetch(S.cfg.url, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },   // evita il preflight CORS
-      body: JSON.stringify(Object.assign({ azione, token: S.cfg.token }, extra))
+/* ------------- dialogo col foglio -------------
+   Via JSONP e non via fetch: Apps Script non può restituire l'header
+   Access-Control-Allow-Origin, quindi ogni POST verrebbe bloccato dal
+   browser. Un tag <script> non è soggetto a quella politica. */
+function chiama(azione, extra = {}, silenzioso = false) {
+  if (!S.cfg.url) return Promise.resolve({ ok: false, errore: "Indirizzo del backend non impostato" });
+
+  return new Promise(risolvi => {
+    const cb = "pvcb" + Date.now() + Math.floor(Math.random() * 1000);
+    const s = document.createElement("script");
+    let chiuso = false;
+
+    const pulisci = () => {
+      if (chiuso) return;
+      chiuso = true;
+      clearTimeout(scadenza);
+      try { delete window[cb]; } catch { window[cb] = undefined; }
+      if (s.parentNode) s.parentNode.removeChild(s);
+    };
+
+    const scadenza = setTimeout(() => {
+      pulisci();
+      if (!silenzioso) avviso("Il foglio non ha risposto in tempo.");
+      risolvi({ ok: false, errore: "tempo scaduto" });
+    }, 30000);
+
+    window[cb] = dati => { pulisci(); risolvi(dati); };
+
+    const q = new URLSearchParams({
+      azione: azione,
+      token: S.cfg.token,
+      dati: JSON.stringify(extra),
+      callback: cb
     });
-    const t = await r.text();
-    return JSON.parse(t);
-  } catch (e) {
-    if (!silenzioso) avviso("Nessuna connessione col foglio. Le modifiche restano in coda.");
-    return { ok: false, errore: String(e) };
-  }
+    const src = S.cfg.url + "?" + q.toString();
+
+    if (src.length > 7000) {
+      pulisci();
+      return risolvi({ ok: false, errore: "richiesta troppo lunga" });
+    }
+
+    s.src = src;
+    s.onerror = () => {
+      pulisci();
+      if (!silenzioso) avviso("Nessuna connessione col foglio. Le modifiche restano in coda.");
+      risolvi({ ok: false, errore: "connessione non riuscita" });
+    };
+    document.head.appendChild(s);
+  });
 }
 
 function accoda(azione, extra) {
@@ -544,7 +578,11 @@ function collega() {
     const id = e.currentTarget.dataset.attiva;
     const o = S.cfg.obiettivi.find(x => x.id === id);
     o.attivo = !o.attivo;
-    L.set("cfg", S.cfg); accoda("salvaConfig", { config: { obiettivi: S.cfg.obiettivi, macro: S.cfg.macro } });
+    L.set("cfg", S.cfg);
+    accoda("salvaConfig", { config: {
+      obiettivi: S.cfg.obiettivi.map(x => ({ id: x.id, attivo: x.attivo, target: x.target })),
+      macro: S.cfg.macro
+    } });
     disegna();
   });
   on("[data-target]", "click", e => {

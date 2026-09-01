@@ -1,6 +1,6 @@
 /* Service worker: l'app si apre anche senza rete.
    Il guscio sta in cache, i dati passano sempre dalla rete. */
-const CACHE = "piano-v1";
+const CACHE = "piano-v2";
 const GUSCIO = ["./", "./index.html", "./app.js", "./piano.js", "./manifest.json",
                 "./icona-192.png", "./icona-512.png", "./icona-apple.png"];
 
@@ -17,7 +17,7 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
   if (e.request.method !== "GET") return;                 // le scritture non si toccano
-  if (u.hostname.includes("script.google")) return;       // i dati sempre dalla rete
+  if (u.hostname.includes("script.google") || u.hostname.includes("googleusercontent")) return;
 
   if (e.request.mode === "navigate") {                    // pagina: rete, poi cache
     e.respondWith(fetch(e.request).catch(() => caches.match("./index.html")));
