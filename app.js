@@ -77,8 +77,10 @@ function chiama(azione, extra = {}, silenzioso = false) {
     }
 
     s.src = src;
+    console.log("[piano] chiamo:", src);
     s.onerror = () => {
       pulisci();
+      console.warn("[piano] il caricamento di questo indirizzo è fallito:", src);
       if (!silenzioso) avviso("Nessuna connessione col foglio. Le modifiche restano in coda.");
       risolvi({ ok: false, errore: "connessione non riuscita" });
     };
@@ -557,13 +559,29 @@ function collega() {
 
   const sc = document.getElementById("salvaColl");
   if (sc) sc.addEventListener("click", async () => {
-    S.cfg.url = document.getElementById("url").value.trim();
-    S.cfg.token = document.getElementById("token").value.trim();
+    const grezzo = document.getElementById("url").value;
+    // via ogni spazio, a capo e carattere invisibile: copiando da Apps Script
+    // capita di portarsene dietro, e basta uno per rendere l'indirizzo inutilizzabile
+    const url = grezzo.replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, "");
+    const esito = document.getElementById("esitoColl");
+
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url)) {
+      esito.innerHTML = `<div class="errore">L'indirizzo non ha la forma attesa.
+        Deve essere <code>https://script.google.com/macros/s/…/exec</code>, senza nulla dopo.
+        Ho letto: <code>${esc(url || "(vuoto)")}</code></div>`;
+      return;
+    }
+
+    S.cfg.url = url;
+    S.cfg.token = document.getElementById("token").value.replace(/[\s\u00A0]/g, "");
     L.set("cfg", S.cfg);
+
+    esito.innerHTML = `<div class="ok">Provo il collegamento…</div>`;
     const r = await chiama("ping");
-    document.getElementById("esitoColl").innerHTML = r.ok
+    esito.innerHTML = r.ok
       ? `<div class="ok">Collegato al foglio “${esc(r.foglio)}”.</div>`
-      : `<div class="errore">${esc(r.errore || "Nessuna risposta dal backend")}</div>`;
+      : `<div class="errore">${esc(r.errore || "Nessuna risposta dal backend")}.
+         L'indirizzo provato è nella console del browser.</div>`;
     if (r.ok) { await svuotaCoda(); caricaMese(S.mese); }
   });
 
