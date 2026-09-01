@@ -42,26 +42,46 @@ const L = {
 function chiama(azione, extra = {}, silenzioso = false) {
   if (!S.cfg.url) return Promise.resolve({ ok: false, errore: "Indirizzo del backend non impostato" });
 
+  // La stima interroga un modello che ragiona, e la sua latenza è
+  // variabile per natura. Le altre azioni toccano solo il foglio e
+  // se tardano vuol dire che qualcosa non va davvero.
+  const limite = azione === "stima" ? 120000 : 20000;
+
   return new Promise(risolvi => {
     const cb = "pvcb" + Date.now() + Math.floor(Math.random() * 1000);
     const s = document.createElement("script");
+    const partenza = Date.now();
     let chiuso = false;
 
     const pulisci = () => {
       if (chiuso) return;
       chiuso = true;
       clearTimeout(scadenza);
-      try { delete window[cb]; } catch { window[cb] = undefined; }
+      // La callback non va cancellata subito: una risposta in ritardo
+      // troverebbe il vuoto e il browser solleverebbe un ReferenceError
+      // che non dice niente a nessuno. La lascio innocua per qualche
+      // minuto, così se arriva tardi lo scopro dalla console.
+      window[cb] = () => {
+        console.warn("[piano] risposta arrivata in ritardo dopo",
+          ((Date.now() - partenza) / 1000).toFixed(1), "secondi, ignorata:", azione);
+      };
+      setTimeout(() => { try { delete window[cb]; } catch { window[cb] = undefined; } }, 300000);
       if (s.parentNode) s.parentNode.removeChild(s);
     };
 
     const scadenza = setTimeout(() => {
       pulisci();
-      if (!silenzioso) avviso("Il foglio non ha risposto in tempo.");
-      risolvi({ ok: false, errore: "tempo scaduto" });
-    }, 30000);
+      const secondi = Math.round(limite / 1000);
+      if (!silenzioso) avviso("Nessuna risposta entro " + secondi + " secondi.");
+      risolvi({ ok: false, errore: "nessuna risposta entro " + secondi + " secondi" });
+    }, limite);
 
-    window[cb] = dati => { pulisci(); risolvi(dati); };
+    window[cb] = dati => {
+      console.log("[piano]", azione, "risolta in",
+        ((Date.now() - partenza) / 1000).toFixed(1), "secondi");
+      pulisci();
+      risolvi(dati);
+    };
 
     const q = new URLSearchParams({
       azione: azione,
@@ -77,7 +97,7 @@ function chiama(azione, extra = {}, silenzioso = false) {
     }
 
     s.src = src;
-    console.log("[piano] chiamo:", src);
+    console.log("[piano] chiamo:", azione);
     s.onerror = () => {
       pulisci();
       console.warn("[piano] il caricamento di questo indirizzo è fallito:", src);
