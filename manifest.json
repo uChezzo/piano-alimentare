@@ -1,0 +1,17 @@
+{
+  "name": "Piano",
+  "short_name": "Piano",
+  "description": "Il mio piano alimentare e i miei obiettivi quotidiani",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F6F1",
+  "theme_color": "#F4F6F1",
+  "lang": "it",
+  "icons": [
+    { "src": "./icona-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
